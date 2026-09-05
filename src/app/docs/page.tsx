@@ -3,6 +3,15 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { API_BASE_URL } from '@/services/api';
+import { Badge } from '@/components/ui/Badge';
+import {
+  ArrowLeft,
+  Copy,
+  Check,
+  ShieldAlert,
+  Server,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 interface EndpointDoc {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -183,13 +192,12 @@ const ENDPOINTS: EndpointDoc[] = [
     method: 'PUT',
     path: '/api/events/:id',
     title: 'Atualizar Evento Existente',
-    description: 'Modifica os dados de um evento existente.',
+    description: 'Atualiza propriedades do evento mantendo os inscritos atuais intactos.',
     statusSuccess: '200 OK',
     requestBody: JSON.stringify(
       {
-        title: 'Masterclass Avançada de Design Tokens',
-        maxCapacity: 75,
-        status: 'published',
+        title: 'Masterclass de Design Tokens & UI (Edição Atualizada)',
+        maxCapacity: 80,
       },
       null,
       2
@@ -197,47 +205,41 @@ const ENDPOINTS: EndpointDoc[] = [
     responseBody: JSON.stringify(
       {
         id: 'evt_2',
-        title: 'Masterclass Avançada de Design Tokens',
-        maxCapacity: 75,
-        status: 'published',
-        attendeesCount: 0,
-        availableSpots: 75,
-        isSoldOut: false,
+        title: 'Masterclass de Design Tokens & UI (Edição Atualizada)',
+        maxCapacity: 80,
+        availableSpots: 80,
       },
       null,
       2
     ),
     rules: [
-      'Não permitir reduzir maxCapacity para um valor menor que a quantidade atual de participantes inscritos.',
+      'Não é permitido reduzir maxCapacity para valor inferior ao número atual de participantes já cadastrados.',
     ],
-    errors: [
-      '400 Bad Request se a nova capacidade for menor que os inscritos atuais.',
-      '404 Not Found se o ID não existir.',
-    ],
+    errors: ['404 Not Found se evento não existir.', '400 Bad Request se validação falhar.'],
   },
   {
     method: 'DELETE',
     path: '/api/events/:id',
-    title: 'Excluir Evento',
-    description: 'Remove o evento e todas as inscrições vinculadas em cascata.',
+    title: 'Remover Evento e Inscrições',
+    description: 'Exclui o evento e remove participantes vinculados em cascata.',
     statusSuccess: '204 No Content',
-    responseBody: '// Retorno com corpo vazio (status 204)',
+    responseBody: '(Vazio)',
     errors: ['404 Not Found se o evento não existir.'],
   },
   {
     method: 'GET',
     path: '/api/events/:id/attendees',
-    title: 'Listar Participantes do Evento',
-    description: 'Retorna a lista de pessoas confirmadas/inscritas no evento.',
+    title: 'Listar Participantes de um Evento',
+    description: 'Retorna array com todos os inscritos confirmados para o evento especificado.',
     statusSuccess: '200 OK',
     responseBody: JSON.stringify(
       [
         {
-          id: 'att_101',
+          id: 'att_1',
           eventId: 'evt_1',
-          name: 'Ana Carolina Moura',
-          email: 'ana.moura@tech.com',
-          registeredAt: '2026-09-02T15:30:00.000Z',
+          name: 'Mariana Duarte',
+          email: 'mariana.duarte@empresa.com',
+          registeredAt: '2026-09-02T14:20:00.000Z',
         },
       ],
       null,
@@ -248,182 +250,344 @@ const ENDPOINTS: EndpointDoc[] = [
   {
     method: 'POST',
     path: '/api/events/:id/attendees',
-    title: 'Inscrever Participante (Regra de Vagas)',
-    description: 'Registra a inscrição de um participante em um determinado evento.',
+    title: 'Inscrever Novo Participante',
+    description: 'Registra a inscrição de uma pessoa e decrementa as vagas do evento.',
     statusSuccess: '201 Created',
     requestBody: JSON.stringify(
       {
-        name: 'Roberto Viana',
-        email: 'roberto.viana@email.com',
+        name: 'Carlos Oliveira',
+        email: 'carlos.oliveira@techcorp.com',
       },
       null,
       2
     ),
     responseBody: JSON.stringify(
       {
-        id: 'att_102',
+        id: 'att_2',
         eventId: 'evt_1',
-        name: 'Roberto Viana',
-        email: 'roberto.viana@email.com',
-        registeredAt: '2026-09-04T22:35:00.000Z',
+        name: 'Carlos Oliveira',
+        email: 'carlos.oliveira@techcorp.com',
+        registeredAt: '2026-09-04T18:00:00.000Z',
       },
       null,
       2
     ),
     rules: [
-      'REGRA 1: Se o evento já estiver com capacidade cheia (attendeesCount >= maxCapacity), retornar 400 Bad Request com a mensagem "Este evento já atingiu sua capacidade máxima de vagas."',
-      'REGRA 2: Se o mesmo e-mail já estiver cadastrado no evento, retornar 409 Conflict com mensagem "Este e-mail já está inscrito neste evento."',
+      'Lotação: Retornar 400 Bad Request caso o evento já tenha atingido maxCapacity.',
+      'Unicidade: Retornar 409 Conflict se o e-mail informado já estiver inscrito no mesmo evento.',
     ],
-    errors: [
-      '400 Bad Request se lotado ou nome/email inválidos.',
-      '409 Conflict se e-mail duplicado no mesmo evento.',
-      '404 Not Found se evento inexistente.',
-    ],
+    errors: ['400 Bad Request (lotação esgotada ou campos inválidos)', '409 Conflict (e-mail duplicado)'],
   },
   {
     method: 'DELETE',
     path: '/api/events/:id/attendees/:attendeeId',
     title: 'Cancelar Inscrição de Participante',
-    description: 'Remove a inscrição do participante, liberando automaticamente uma vaga no evento.',
+    description: 'Remove o participante e incrementa automaticamente 1 vaga disponível.',
     statusSuccess: '204 No Content',
-    responseBody: '// Retorno com corpo vazio (status 204)',
-    rules: ['Ao excluir, a vaga deve ser liberada imediatamente para novos participantes.'],
+    responseBody: '(Vazio)',
     errors: ['404 Not Found se o participante ou evento não existirem.'],
   },
 ];
 
-export default function ApiDocsPage() {
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+export default function DocsPage() {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<string>('ALL');
 
-  const handleCopy = (text: string, index: number) => {
+  const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
+    setCopiedKey(key);
+    toast.success('Conteúdo copiado para a área de transferência!');
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const getMethodBadgeClass = (method: string) => {
+  const getMethodBadgeStyle = (method: string) => {
     switch (method) {
       case 'GET':
-        return 'badge-success';
+        return { bg: 'rgba(6, 182, 212, 0.12)', border: 'rgba(6, 182, 212, 0.3)', color: '#22d3ee' };
       case 'POST':
-        return 'badge-primary';
+        return { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)', color: '#34d399' };
       case 'PUT':
-        return 'badge-warning';
+        return { bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' };
       case 'DELETE':
-        return 'badge-danger';
+        return { bg: 'rgba(244, 63, 94, 0.12)', border: 'rgba(244, 63, 94, 0.3)', color: '#fb7185' };
       default:
-        return 'badge-neutral';
+        return { bg: 'rgba(255, 255, 255, 0.1)', border: 'var(--border-subtle)', color: '#cbd5e1' };
     }
   };
 
+  const filteredEndpoints =
+    selectedMethod === 'ALL'
+      ? ENDPOINTS
+      : ENDPOINTS.filter((ep) => ep.method === selectedMethod);
+
   return (
-    <div className="app-container" style={{ maxWidth: '980px' }}>
-      <div style={{ marginBottom: '36px' }}>
-        <Link href="/" className="btn btn-outline btn-sm" style={{ marginBottom: '20px' }}>
-          ← Voltar para o Dashboard
-        </Link>
+    <div className="app-container" style={{ maxWidth: '960px' }}>
+      {/* Retorno */}
+      <Link
+        href="/"
+        className="btn btn-outline btn-sm"
+        style={{ marginBottom: '24px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Voltar ao Painel</span>
+      </Link>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <span className="badge badge-primary">Guia de Implementação</span>
-          <span className="badge badge-neutral">RESTful API</span>
+      {/* Header Docs */}
+      <div style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <Badge variant="primary">Documentação Técnica</Badge>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>REST API Specs</span>
         </div>
-
         <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
-          Especificação Completa da API
+          Guia de Integração da API
         </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', marginTop: '8px', lineHeight: 1.6 }}>
-          Este guia lista todos os contratos esperados pelo frontend. Construa a sua API em Node.js,
-          Python, Java, Go ou qualquer tecnologia de sua preferência seguindo as especificações abaixo.
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginTop: '6px', lineHeight: 1.6 }}>
+          Referência completa de endpoints, payloads JSON esperados, validações de negócio e códigos de status HTTP.
         </p>
 
+        {/* Card de Configuração da URL Base */}
         <div
           className="card"
           style={{
-            marginTop: '20px',
-            background: 'rgba(99, 102, 241, 0.08)',
-            borderColor: 'rgba(99, 102, 241, 0.25)',
+            marginTop: '24px',
+            padding: '20px 24px',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(17, 23, 38, 0.95) 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.25)',
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'space-between',
+            alignItems: 'center',
             flexWrap: 'wrap',
             gap: '16px',
           }}
         >
-          <div>
-            <div style={{ fontSize: '0.82rem', color: '#a5b4fc', fontWeight: 600 }}>
-              URL BASE CONFIGURADA NO FRONTEND:
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: 'var(--primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Server className="w-5 h-5" />
             </div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>
-              <code>{API_BASE_URL}</code>
+            <div>
+              <div style={{ fontSize: '0.78rem', color: '#a5b4fc', fontWeight: 700, textTransform: 'uppercase' }}>
+                URL Base Configurada
+              </div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff', fontFamily: 'var(--font-mono)' }}>
+                {API_BASE_URL}
+              </div>
             </div>
           </div>
-          <div style={{ fontSize: '0.85rem', color: '#c7d2fe', maxWidth: '380px' }}>
-            Para alterar a porta, modifique a variável <code>NEXT_PUBLIC_API_URL</code> no arquivo <code>.env.local</code>.
+
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', maxWidth: '380px', lineHeight: 1.5 }}>
+            Para alterar o endereço da API, ajuste a variável <code>NEXT_PUBLIC_API_URL</code> no arquivo <code>.env.local</code>.
           </div>
         </div>
       </div>
 
+      {/* Filtros por Método HTTP */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {['ALL', 'GET', 'POST', 'PUT', 'DELETE'].map((method) => (
+          <button
+            key={method}
+            onClick={() => setSelectedMethod(method)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-full)',
+              background: selectedMethod === method ? 'var(--primary)' : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${selectedMethod === method ? 'var(--primary)' : 'var(--border-subtle)'}`,
+              color: selectedMethod === method ? '#fff' : 'var(--text-secondary)',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {method === 'ALL' ? 'Todos os Métodos' : method}
+          </button>
+        ))}
+      </div>
+
       {/* Lista de Endpoints */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {ENDPOINTS.map((ep, idx) => (
-          <div key={idx} className="card" style={{ padding: '28px' }}>
-            {/* Header da Rota */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {filteredEndpoints.map((ep, idx) => {
+          const methodStyle = getMethodBadgeStyle(ep.method);
+
+          return (
             <div
+              key={idx}
+              className="card"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px',
-                borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: '16px',
-                marginBottom: '16px',
+                padding: '28px',
+                border: '1px solid var(--border-medium)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span className={`badge ${getMethodBadgeClass(ep.method)}`} style={{ fontSize: '0.85rem' }}>
-                  {ep.method}
-                </span>
-                <span style={{ fontSize: '1.15rem', fontWeight: 700, fontFamily: 'monospace', color: '#fff' }}>
-                  {ep.path}
-                </span>
-              </div>
-
-              <span className="badge badge-neutral">Status: {ep.statusSuccess}</span>
-            </div>
-
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>
-              {ep.title}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', lineHeight: 1.5, marginBottom: '20px' }}>
-              {ep.description}
-            </p>
-
-            {/* Regras de negócio */}
-            {ep.rules && ep.rules.length > 0 && (
+              {/* Cabeçalho da Rota */}
               <div
                 style={{
-                  padding: '14px 18px',
-                  background: 'rgba(245, 158, 11, 0.08)',
-                  border: '1px solid rgba(245, 158, 11, 0.25)',
-                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  paddingBottom: '16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: methodStyle.bg,
+                      border: `1px solid ${methodStyle.border}`,
+                      color: methodStyle.color,
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {ep.method}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      fontFamily: 'var(--font-mono)',
+                      color: '#fff',
+                    }}
+                  >
+                    {ep.path}
+                  </span>
+                </div>
+
+                <Badge variant="neutral">Status: {ep.statusSuccess}</Badge>
+              </div>
+
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>
+                {ep.title}
+              </h3>
+              <p
+                style={{
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.92rem',
+                  lineHeight: 1.5,
                   marginBottom: '20px',
                 }}
               >
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fcd34d', marginBottom: '6px' }}>
-                  ⚡ Regras de Negócio Obrigatórias:
-                </div>
-                <ul style={{ paddingLeft: '20px', color: '#fde68a', fontSize: '0.85rem', lineHeight: 1.6 }}>
-                  {ep.rules.map((rule, rIdx) => (
-                    <li key={rIdx}>{rule}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                {ep.description}
+              </p>
 
-            {/* Request Body se houver */}
-            {ep.requestBody && (
-              <div style={{ marginBottom: '20px' }}>
+              {/* Regras de Negócio */}
+              {ep.rules && ep.rules.length > 0 && (
+                <div
+                  style={{
+                    padding: '16px 18px',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: '20px',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '0.84rem',
+                      fontWeight: 700,
+                      color: '#fcd34d',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <ShieldAlert className="w-4 h-4" />
+                    <span>Regras de Negócio Obrigatórias:</span>
+                  </div>
+                  <ul
+                    style={{
+                      paddingLeft: '20px',
+                      color: '#fde68a',
+                      fontSize: '0.85rem',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {ep.rules.map((rule, rIdx) => (
+                      <li key={rIdx}>{rule}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Request Payload */}
+              {ep.requestBody && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      Payload de Requisição (JSON)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(ep.requestBody!, `req-${idx}`)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      {copiedKey === `req-${idx}` ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>Copiado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copiar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <pre
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.45)',
+                      padding: '16px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-subtle)',
+                      color: '#93c5fd',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.84rem',
+                      overflowX: 'auto',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {ep.requestBody}
+                  </pre>
+                </div>
+              )}
+
+              {/* Response Body */}
+              <div>
                 <div
                   style={{
                     display: 'flex',
@@ -432,80 +596,75 @@ export default function ApiDocsPage() {
                     marginBottom: '8px',
                   }}
                 >
-                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                    PAYLOAD DE REQUISIÇÃO (JSON):
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Resposta de Sucesso (JSON)
                   </span>
                   <button
-                    onClick={() => handleCopy(ep.requestBody!, idx * 10)}
-                    className="btn btn-outline btn-sm"
-                    style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                    type="button"
+                    onClick={() => handleCopy(ep.responseBody, `res-${idx}`)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.75rem',
+                      padding: '4px 10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
                   >
-                    {copiedIndex === idx * 10 ? '✓ Copiado!' : 'Copiar JSON'}
+                    {copiedKey === `res-${idx}` ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Copiado</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copiar</span>
+                      </>
+                    )}
                   </button>
                 </div>
                 <pre
                   style={{
-                    background: 'rgba(0, 0, 0, 0.4)',
+                    background: 'rgba(0, 0, 0, 0.45)',
                     padding: '16px',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-subtle)',
-                    color: '#93c5fd',
-                    fontFamily: 'monospace',
-                    fontSize: '0.85rem',
+                    color: '#86efac',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.84rem',
                     overflowX: 'auto',
+                    lineHeight: 1.5,
                   }}
                 >
-                  {ep.requestBody}
+                  {ep.responseBody}
                 </pre>
               </div>
-            )}
 
-            {/* Response Body */}
-            <div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '8px',
-                }}
-              >
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  RESPOSTA DE SUCESSO (JSON):
-                </span>
-                <button
-                  onClick={() => handleCopy(ep.responseBody, idx * 10 + 1)}
-                  className="btn btn-outline btn-sm"
-                  style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+              {/* Erros Esperados */}
+              {ep.errors && ep.errors.length > 0 && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '10px 14px',
+                    background: 'rgba(244, 63, 94, 0.06)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid rgba(244, 63, 94, 0.18)',
+                    fontSize: '0.82rem',
+                    color: '#fda4af',
+                  }}
                 >
-                  {copiedIndex === idx * 10 + 1 ? '✓ Copiado!' : 'Copiar JSON'}
-                </button>
-              </div>
-              <pre
-                style={{
-                  background: 'rgba(0, 0, 0, 0.4)',
-                  padding: '16px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  color: '#86efac',
-                  fontFamily: 'monospace',
-                  fontSize: '0.85rem',
-                  overflowX: 'auto',
-                }}
-              >
-                {ep.responseBody}
-              </pre>
+                  <strong>Erros possíveis: </strong>
+                  {ep.errors.join(' • ')}
+                </div>
+              )}
             </div>
-
-            {/* Erros possíveis */}
-            {ep.errors && ep.errors.length > 0 && (
-              <div style={{ marginTop: '16px', fontSize: '0.82rem', color: '#fca5a5' }}>
-                <strong>Erros esperados: </strong>
-                {ep.errors.join(' | ')}
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
