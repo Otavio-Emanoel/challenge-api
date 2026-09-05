@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiStatusBanner } from '@/components/ApiStatusBanner';
 import { apiService } from '@/services/api';
 import { Attendee, Event } from '@/types';
@@ -30,31 +30,43 @@ export default function EventDetailsPage() {
 
   // Estado para exclusão de participante
   const [deletingAttendeeId, setDeletingAttendeeId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState<number>(0);
 
-  const loadEventData = useCallback(async () => {
-    if (!id) return;
+  const handleRetry = () => {
     setIsLoading(true);
     setError(null);
-
-    try {
-      const [eventData, attendeesData] = await Promise.all([
-        apiService.getEventById(id),
-        apiService.getEventAttendees(id).catch(() => [] as Attendee[]),
-      ]);
-
-      setEvent(eventData);
-      setAttendees(attendeesData);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao buscar detalhes do evento.';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
+    setReloadKey((k) => k + 1);
+  };
 
   useEffect(() => {
-    loadEventData();
-  }, [loadEventData]);
+    let isCancelled = false;
+    if (!id) return;
+
+    Promise.all([
+      apiService.getEventById(id),
+      apiService.getEventAttendees(id).catch(() => [] as Attendee[]),
+    ])
+      .then(([eventData, attendeesData]) => {
+        if (!isCancelled) {
+          setEvent(eventData);
+          setAttendees(attendeesData);
+          setError(null);
+          setIsLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled) {
+          const message =
+            err instanceof Error ? err.message : 'Erro ao buscar detalhes do evento.';
+          setError(message);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [id, reloadKey]);
 
   const handleRegisterAttendee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +176,7 @@ export default function EventDetailsPage() {
         <Link href="/" className="btn btn-outline btn-sm" style={{ marginBottom: '24px' }}>
           ← Voltar para Eventos
         </Link>
-        <ApiStatusBanner error={error || 'Evento não encontrado no backend.'} onRetry={loadEventData} />
+        <ApiStatusBanner error={error || 'Evento não encontrado no backend.'} onRetry={handleRetry} />
       </div>
     );
   }
@@ -613,7 +625,7 @@ export default function EventDetailsPage() {
 
             <div className="modal-body">
               <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                Tem certeza que deseja excluir o evento <strong>"{event.title}"</strong>? Esta
+                Tem certeza que deseja excluir o evento <strong>&ldquo;{event.title}&rdquo;</strong>? Esta
                 ação removerá todas as inscrições associadas e não pode ser desfeita.
               </p>
             </div>

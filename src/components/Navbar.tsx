@@ -9,19 +9,27 @@ export function Navbar() {
   const pathname = usePathname();
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
-  const checkStatus = async () => {
-    try {
-      await apiService.checkHealth();
-      setApiStatus('online');
-    } catch {
-      setApiStatus('offline');
-    }
-  };
-
   useEffect(() => {
-    checkStatus();
-    const interval = setInterval(checkStatus, 15000); // checa a cada 15 segundos
-    return () => clearInterval(interval);
+    let isMounted = true;
+
+    const ping = () => {
+      apiService
+        .checkHealth()
+        .then(() => {
+          if (isMounted) setApiStatus('online');
+        })
+        .catch(() => {
+          if (isMounted) setApiStatus('offline');
+        });
+    };
+
+    ping();
+    const interval = setInterval(ping, 15000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   return (
