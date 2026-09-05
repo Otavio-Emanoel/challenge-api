@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { API_BASE_URL, apiService } from '@/services/api';
+import { apiService } from '@/services/api';
+import { Calendar, Plus, BookOpen, Layers } from 'lucide-react';
 
 export function Navbar() {
   const pathname = usePathname();
-  const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -16,15 +17,15 @@ export function Navbar() {
       apiService
         .checkHealth()
         .then(() => {
-          if (isMounted) setApiStatus('online');
+          if (isMounted) setIsOnline(true);
         })
         .catch(() => {
-          if (isMounted) setApiStatus('offline');
+          if (isMounted) setIsOnline(false);
         });
     };
 
     ping();
-    const interval = setInterval(ping, 15000);
+    const interval = setInterval(ping, 20000);
 
     return () => {
       isMounted = false;
@@ -35,49 +36,77 @@ export function Navbar() {
   return (
     <header className="navbar">
       <div className="app-container navbar-inner">
-        <Link href="/" className="brand">
-          <div className="brand-icon">⚡</div>
-          <span>Event<span style={{ color: 'var(--primary)' }}>Pulse</span></span>
-        </Link>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+          <Link href="/" className="brand">
+            <div className="brand-icon-box">
+              <Layers className="w-5 h-5 text-white" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-0.03em' }}>
+                Event<span style={{ color: 'var(--primary)' }}>Pulse</span>
+              </span>
+            </div>
+          </Link>
 
-        <nav className="nav-links">
-          <Link
-            href="/"
-            className={`nav-link ${pathname === '/' ? 'active' : ''}`}
-          >
-            Eventos
-          </Link>
-          <Link
-            href="/events/new"
-            className={`nav-link ${pathname === '/events/new' ? 'active' : ''}`}
-          >
-            + Criar Evento
-          </Link>
-          <Link
-            href="/docs"
-            className={`nav-link ${pathname === '/docs' ? 'active' : ''}`}
-          >
-            📖 Guia da API
-          </Link>
-        </nav>
+          {/* Navigation Links */}
+          <nav className="nav-links">
+            <Link
+              href="/"
+              className={`nav-link ${pathname === '/' ? 'active' : ''}`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Painel de Eventos</span>
+            </Link>
+            <Link
+              href="/events/new"
+              className={`nav-link ${pathname === '/events/new' ? 'active' : ''}`}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Evento</span>
+            </Link>
+          </nav>
+        </div>
 
+        {/* Action Buttons & Status */}
         <div className="nav-actions">
+          {/* Subtle System Status */}
           <div
-            className={`api-status-pill ${apiStatus}`}
-            title={`Conectado em: ${API_BASE_URL}`}
+            className="system-status-indicator"
+            title={
+              isOnline === true
+                ? 'Conexão ativa e sincronizada'
+                : isOnline === false
+                ? 'Tentando reconectar aos serviços...'
+                : 'Verificando conexão...'
+            }
           >
-            <span className="api-status-dot" />
-            <span>
-              {apiStatus === 'online'
-                ? 'API Online'
-                : apiStatus === 'offline'
-                ? 'API Offline'
-                : 'Checando API...'}
+            <span
+              className={`status-dot ${
+                isOnline === true ? 'online' : isOnline === false ? 'offline' : ''
+              }`}
+            />
+            <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>
+              {isOnline === true
+                ? 'Sincronizado'
+                : isOnline === false
+                ? 'Desconectado'
+                : 'Conectando...'}
             </span>
           </div>
 
+          <Link
+            href="/docs"
+            className={`nav-link ${pathname === '/docs' ? 'active' : ''}`}
+            title="Especificações de Integração"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Guia da API</span>
+          </Link>
+
           <Link href="/events/new" className="btn btn-primary btn-sm">
-            Novo Evento
+            <Plus className="w-4 h-4" />
+            <span>Criar Evento</span>
           </Link>
         </div>
       </div>
