@@ -3,8 +3,24 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiStatusBanner } from '@/components/ApiStatusBanner';
+import { StatCard } from '@/components/StatCard';
+import { EventCard } from '@/components/EventCard';
+import { EventTableView } from '@/components/EventTableView';
+import { Button } from '@/components/ui/Button';
 import { apiService } from '@/services/api';
 import { DashboardStats, Event } from '@/types';
+import {
+  Calendar,
+  Users,
+  AlertCircle,
+  Sparkles,
+  Search,
+  Plus,
+  RefreshCw,
+  LayoutGrid,
+  List,
+  X,
+} from 'lucide-react';
 
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -14,14 +30,19 @@ export default function HomePage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const loadData = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setApiError(null);
 
     try {
-      // Carrega eventos, estatísticas e categorias em paralelo
       const [eventsRes, statsRes, categoriesRes] = await Promise.allSettled([
         apiService.getEvents({
           search: searchQuery.trim() || undefined,
@@ -32,34 +53,32 @@ export default function HomePage() {
         apiService.getCategories(),
       ]);
 
-      // Trata retorno dos eventos
       if (eventsRes.status === 'fulfilled') {
         setEvents(eventsRes.value.events || []);
       } else {
         const message =
           eventsRes.reason instanceof Error
             ? eventsRes.reason.message
-            : 'Erro ao carregar eventos da API.';
+            : 'Erro ao carregar eventos do servidor.';
         setApiError(message);
         setEvents([]);
       }
 
-      // Trata retorno das estatísticas
       if (statsRes.status === 'fulfilled') {
         setStats(statsRes.value);
       }
 
-      // Trata retorno das categorias
       if (categoriesRes.status === 'fulfilled' && Array.isArray(categoriesRes.value)) {
         setCategories(categoriesRes.value);
       } else {
         setCategories(['Tecnologia', 'Design', 'Negócios', 'Marketing', 'Geral']);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao comunicar com a API.';
+      const msg = err instanceof Error ? err.message : 'Erro ao comunicar com o servidor.';
       setApiError(msg);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [searchQuery, selectedCategory, selectedStatus]);
 
@@ -71,203 +90,269 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [loadData]);
 
-  const formatDate = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return new Intl.DateTimeFormat('pt-BR', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(date);
-    } catch {
-      return isoString;
-    }
-  };
+  // Contadores computados de fallback caso endpoint de stats não esteja pronto
+  const totalEventsCount = stats ? stats.totalEvents : events.length;
+  const activeRegistrationsCount = stats
+    ? stats.activeRegistrations
+    : events.reduce((acc, e) => acc + (e.attendeesCount || 0), 0);
+  const soldOutEventsCount = stats
+    ? stats.soldOutEvents
+    : events.filter((e) => e.isSoldOut || (e.attendeesCount >= e.maxCapacity)).length;
+  const upcomingEventsCount = stats
+    ? stats.upcomingEvents
+    : events.filter((e) => !e.isSoldOut).length;
 
   return (
     <div className="app-container">
-      {/* Hero Section */}
+      {/* Hero / Header Section */}
       <section style={{ marginBottom: '32px' }}>
-        <div style={{ maxWidth: '720px' }}>
-          <span className="badge badge-primary" style={{ marginBottom: '12px' }}>
-            Desafio Técnico • Backend & Frontend
-          </span>
-          <h1
-            style={{
-              fontSize: '2.4rem',
-              fontWeight: 800,
-              lineHeight: 1.2,
-              letterSpacing: '-0.025em',
-              marginBottom: '12px',
-            }}
-          >
-            Gestão de Eventos e Controle de Inscrições
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.6 }}>
-            Este painel consome diretamente os endpoints da API backend em desenvolvimento.
-            Acompanhe lotações, gerencie participantes e filtre eventos em tempo real.
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+          <div style={{ maxWidth: '680px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+              <span className="badge badge-primary">Painel de Gestão</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Controle em tempo real
+              </span>
+            </div>
+            <h1
+              style={{
+                fontSize: '2.4rem',
+                fontWeight: 800,
+                lineHeight: 1.15,
+                letterSpacing: '-0.03em',
+                color: '#fff',
+                marginBottom: '10px',
+              }}
+            >
+              Eventos & Inscrições
+            </h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', lineHeight: 1.6 }}>
+              Acompanhe a lotação em tempo real, gerencie listas de participantes e crie novas
+              experiências com controle completo de vagas.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <Link href="/events/new" className="btn btn-primary">
+              <Plus className="w-4 h-4" />
+              <span>Criar Novo Evento</span>
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* Banner caso a API esteja offline ou com erro */}
-      <ApiStatusBanner error={apiError} onRetry={loadData} />
+      {/* Banner de status em caso de indisponibilidade */}
+      <ApiStatusBanner error={apiError} onRetry={() => loadData(true)} />
 
-      {/* Cards de Métricas */}
+      {/* Grid de Métricas Principais */}
       <section
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: '16px',
           marginBottom: '36px',
         }}
       >
-        <div className="card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>TOTAL DE EVENTOS</span>
-            <span>📅</span>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, marginTop: '8px', color: '#fff' }}>
-            {stats ? stats.totalEvents : events.length}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Eventos cadastrados
-          </div>
-        </div>
+        <StatCard
+          title="Total de Eventos"
+          value={totalEventsCount}
+          description="Cadastrados na plataforma"
+          icon={<Calendar className="w-5 h-5" />}
+          variant="indigo"
+        />
 
-        <div className="card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>INSCRIÇÕES ATIVAS</span>
-            <span>👥</span>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, marginTop: '8px', color: '#818cf8' }}>
-            {stats
-              ? stats.activeRegistrations
-              : events.reduce((acc, e) => acc + (e.attendeesCount || 0), 0)}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Participantes confirmados
-          </div>
-        </div>
+        <StatCard
+          title="Inscrições Ativas"
+          value={activeRegistrationsCount}
+          description="Participantes confirmados"
+          icon={<Users className="w-5 h-5" />}
+          variant="emerald"
+        />
 
-        <div className="card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>EVENTOS ESGOTADOS</span>
-            <span>🔥</span>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, marginTop: '8px', color: '#f87171' }}>
-            {stats
-              ? stats.soldOutEvents
-              : events.filter((e) => e.isSoldOut || (e.attendeesCount >= e.maxCapacity)).length}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            100% de capacidade
-          </div>
-        </div>
+        <StatCard
+          title="Eventos Esgotados"
+          value={soldOutEventsCount}
+          description="100% de capacidade atingida"
+          icon={<AlertCircle className="w-5 h-5" />}
+          variant="rose"
+        />
 
-        <div className="card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>PRÓXIMOS EVENTOS</span>
-            <span>🚀</span>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, marginTop: '8px', color: '#34d399' }}>
-            {stats ? stats.upcomingEvents : events.filter((e) => !e.isSoldOut).length}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Com vagas disponíveis
-          </div>
-        </div>
+        <StatCard
+          title="Vagas Abertas"
+          value={upcomingEventsCount}
+          description="Eventos disponíveis para inscrição"
+          icon={<Sparkles className="w-5 h-5" />}
+          variant="amber"
+        />
       </section>
 
-      {/* Barra de Filtros */}
+      {/* Barra de Filtros & Controles de Visualização */}
       <section
         className="card"
         style={{
-          padding: '20px',
+          padding: '16px 20px',
           marginBottom: '28px',
           display: 'flex',
           flexWrap: 'wrap',
-          gap: '16px',
+          gap: '14px',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
-        <div style={{ flex: '1 1 300px', position: 'relative' }}>
+        {/* Campo de Busca com ícone */}
+        <div style={{ flex: '1 1 320px', position: 'relative' }}>
+          <Search
+            className="w-4 h-4"
+            style={{
+              position: 'absolute',
+              left: '14px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
           <input
             type="text"
             className="form-input"
-            placeholder="🔍 Buscar evento por título ou tema..."
+            style={{ paddingLeft: '40px', paddingRight: searchQuery ? '36px' : '14px' }}
+            placeholder="Buscar por título, tema ou palavra-chave..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Limpar busca"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <select
-            className="form-select"
-            style={{ width: 'auto', minWidth: '160px' }}
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="all">Todas Categorias</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+        {/* Filtros e Ações */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: '170px' }}>
+            <select
+              className="form-select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              aria-label="Filtrar por categoria"
+            >
+              <option value="all">Todas as Categorias</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            className="form-select"
-            style={{ width: 'auto', minWidth: '170px' }}
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-          >
-            <option value="all">Todos os Status</option>
-            <option value="available">Vagas Disponíveis</option>
-            <option value="soldout">Esgotados</option>
-          </select>
+          <div style={{ minWidth: '170px' }}>
+            <select
+              className="form-select"
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              aria-label="Filtrar por status"
+            >
+              <option value="all">Todos os Status</option>
+              <option value="available">Vagas Disponíveis</option>
+              <option value="soldout">Esgotados</option>
+            </select>
+          </div>
 
-          <button
-            onClick={loadData}
-            className="btn btn-secondary"
-            title="Recarregar dados da API"
+          {/* Toggle de Visualização (Grid / Tabela) */}
+          <div
+            style={{
+              display: 'flex',
+              background: 'var(--bg-input)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              padding: '2px',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              style={{
+                padding: '7px 10px',
+                borderRadius: 'var(--radius-sm)',
+                background: viewMode === 'grid' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                border: 'none',
+                color: viewMode === 'grid' ? '#fff' : 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.15s ease',
+              }}
+              title="Visualização em Grade"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                padding: '7px 10px',
+                borderRadius: 'var(--radius-sm)',
+                background: viewMode === 'table' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                border: 'none',
+                color: viewMode === 'table' ? '#fff' : 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.15s ease',
+              }}
+              title="Visualização em Tabela"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Botão Atualizar */}
+          <Button
+            variant="secondary"
+            onClick={() => loadData(true)}
+            isLoading={isRefreshing}
+            title="Recarregar eventos"
             style={{ padding: '10px 14px' }}
           >
-            🔄
-          </button>
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       </section>
 
-      {/* Grid de Eventos */}
+      {/* Conteúdo de Eventos: Loading Skeleton, Empty State ou Lista */}
       {isLoading ? (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
             gap: '24px',
           }}
         >
-          {[1, 2, 3, 4, 5, 6].map((n) => (
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div
-              key={n}
-              className="card"
+              key={i}
+              className="card skeleton"
               style={{
-                height: '340px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                background: 'rgba(255,255,255,0.02)',
+                height: '380px',
+                borderRadius: 'var(--radius-lg)',
               }}
-            >
-              <div className="spinner" style={{ marginBottom: '12px' }} />
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                Consultando API...
-              </span>
-            </div>
+            />
           ))}
         </div>
       ) : events.length === 0 ? (
@@ -275,216 +360,76 @@ export default function HomePage() {
           className="card"
           style={{
             textAlign: 'center',
-            padding: '64px 24px',
-            maxWidth: '640px',
+            padding: '72px 24px',
+            maxWidth: '600px',
             margin: '0 auto',
           }}
         >
-          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🎪</div>
-          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '8px', color: '#fff' }}>
-            {apiError ? 'Aguardando inicialização da API' : 'Nenhum evento encontrado'}
+          <div
+            style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: 'var(--radius-xl)',
+              background: 'rgba(99, 102, 241, 0.1)',
+              color: 'var(--primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px auto',
+            }}
+          >
+            <Calendar className="w-8 h-8" />
+          </div>
+
+          <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>
+            Nenhum evento encontrado
           </h3>
           <p
             style={{
               color: 'var(--text-secondary)',
-              marginBottom: '24px',
+              fontSize: '0.94rem',
               lineHeight: 1.6,
+              marginBottom: '28px',
             }}
           >
-            {apiError
-              ? 'Inicie o backend para que os eventos cadastrados sejam exibidos aqui automaticamente.'
-              : 'Não há eventos correspondentes aos filtros aplicados, ou ainda não foi cadastrado nenhum evento no banco de dados da API.'}
+            {searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all'
+              ? 'Nenhum resultado corresponde aos filtros aplicados. Tente ajustar os termos de pesquisa ou redefinir os filtros.'
+              : 'Você ainda não possui eventos cadastrados na plataforma. Crie o primeiro evento para começar a receber inscrições.'}
           </p>
+
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {(searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all') && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('all');
+                  setSelectedStatus('all');
+                }}
+              >
+                Limpar Filtros
+              </Button>
+            )}
             <Link href="/events/new" className="btn btn-primary">
-              + Cadastrar Primeiro Evento
-            </Link>
-            <Link href="/docs" className="btn btn-outline">
-              Ver Guia de Endpoints
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Novo Evento</span>
             </Link>
           </div>
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
             gap: '24px',
           }}
         >
-          {events.map((event) => {
-            const attendees = event.attendeesCount || 0;
-            const capacity = event.maxCapacity || 1;
-            const percentage = Math.min(100, Math.round((attendees / capacity) * 100));
-            const isFull = event.isSoldOut || attendees >= capacity;
-
-            return (
-              <div
-                key={event.id}
-                className="card card-hover"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  padding: '0',
-                }}
-              >
-                {/* Imagem de Capa do Evento */}
-                <div
-                  style={{
-                    height: '160px',
-                    width: '100%',
-                    background: event.imageUrl
-                      ? `url(${event.imageUrl}) center/cover no-repeat`
-                      : 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)',
-                    position: 'relative',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background:
-                        'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(15,23,42,0.95) 100%)',
-                    }}
-                  />
-
-                  <div
-                    style={{
-                      position: 'relative',
-                      zIndex: 2,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <span className="badge badge-primary">{event.category}</span>
-                    {isFull ? (
-                      <span className="badge badge-danger">ESGOTADO</span>
-                    ) : (
-                      <span className="badge badge-success">VAGAS ABERTAS</span>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      position: 'relative',
-                      zIndex: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '0.82rem',
-                      color: '#cbd5e1',
-                    }}
-                  >
-                    <span>{event.locationType === 'online' ? '💻 Online' : '📍 Presencial'}</span>
-                    <span>•</span>
-                    <span>{formatDate(event.date)}</span>
-                  </div>
-                </div>
-
-                {/* Conteúdo do Card */}
-                <div
-                  style={{
-                    padding: '20px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flex: 1,
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <h3
-                      style={{
-                        fontSize: '1.2rem',
-                        fontWeight: 700,
-                        lineHeight: 1.3,
-                        marginBottom: '8px',
-                        color: '#fff',
-                      }}
-                    >
-                      {event.title}
-                    </h3>
-                    <p
-                      style={{
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.88rem',
-                        lineHeight: 1.5,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        marginBottom: '16px',
-                      }}
-                    >
-                      {event.description}
-                    </p>
-                  </div>
-
-                  {/* Controle de Lotação */}
-                  <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: '0.82rem',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      <span style={{ color: 'var(--text-secondary)' }}>
-                        Ocupação ({attendees}/{capacity})
-                      </span>
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color: isFull ? '#f87171' : percentage > 75 ? '#fbbf24' : '#34d399',
-                        }}
-                      >
-                        {percentage}%
-                      </span>
-                    </div>
-
-                    <div className="progress-container">
-                      <div
-                        className={`progress-fill ${
-                          isFull ? 'full' : percentage > 75 ? 'warning' : ''
-                        }`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginTop: '16px',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {isFull
-                          ? 'Vagas encerradas'
-                          : `${Math.max(0, capacity - attendees)} vagas restantes`}
-                      </span>
-
-                      <Link
-                        href={`/events/${event.id}`}
-                        className="btn btn-primary btn-sm"
-                        style={{ borderRadius: 'var(--radius-md)' }}
-                      >
-                        Gerenciar →
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {events.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
         </div>
+      ) : (
+        <EventTableView events={events} />
       )}
     </div>
   );
