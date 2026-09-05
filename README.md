@@ -45,6 +45,31 @@ Abra [http://localhost:3000](http://localhost:3000) no seu navegador.
 
 ---
 
+## 🧪 Validador Automatizado de API & Avaliação de Nota (0 a 10)
+
+Para testar sua API backend de ponta a ponta e saber sua nota imediatamente, utilize os scripts inclusos no projeto:
+
+### No Windows:
+- **Opção 1 (Batch):** Dê um duplo clique no arquivo `validate-api.bat` (ou execute `.\validate-api.bat` no CMD).
+- **Opção 2 (PowerShell):** Execute `.\validate-api.ps1` no PowerShell.
+
+### No Linux / macOS:
+```bash
+./validate-api.sh
+```
+
+### Ou diretamente via npm:
+```bash
+npm run validate
+```
+
+O script perguntará a URL da sua API (padrão: `http://localhost:3333`), executará 15 testes de conformidade técnica e regras de negócio (limite de vagas, e-mail duplicado, CRUD, status codes) e exibirá:
+- ✅ Status de aprovação de cada endpoint
+- ⚠️ Detalhamento de falhas e motivos
+- 📊 **Nota final de 0.0 a 10.0** com classificação (Excelente, Bom, Regular ou Insuficiente)
+
+---
+
 ## 📋 Regras de Negócio Principais da API
 1. **Lotação Máxima:** Não permitir inscrições além da capacidade (`maxCapacity`) definida no evento (`400 Bad Request`).
 2. **E-mail Único:** Um mesmo participante (e-mail) não pode se inscrever mais de uma vez no mesmo evento (`409 Conflict`).
